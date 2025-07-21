@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const API_BASE_URL = 'http://localhost:5000/api'; // URL do backend Flask
+const API_BASE_URL = 'https://nghki1clpdyz.manus.space/api'; // URL do backend Flask deployado
 
 export const useAuth = () => {
   const [user, setUser] = useState(null);
