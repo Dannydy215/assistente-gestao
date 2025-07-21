@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const API_BASE_URL = 'https://3dhkilcjpljw.manus.space/api' // URL do backend Flask deployado
+const API_BASE_URL = 'https://5000-iexvrgi29lm247wn99les-e7684047.manusvm.computer/api' // URL do backend Flask local
 
 export const useTasks = () => {
   const [tasks, setTasks] = useState([])
