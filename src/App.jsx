@@ -1,486 +1,364 @@
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Badge } from '@/components/ui/badge.jsx'
-import { Calendar, CheckCircle, Clock, AlertTriangle, AlertCircle, Plus, Search, Filter, Edit, Trash2, Download, Settings } from 'lucide-react'
-import { useTasks } from './hooks/useTasks.js'
-import TaskForm from './components/TaskForm.jsx'
-import FilterPanel from './components/FilterPanel.jsx'
-import ExportPanel from './components/ExportPanel.jsx'
-import AuthPanel from './components/AuthPanel.jsx'
-import { CommandParser } from './utils/commandParser.js'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, CheckCircle, Clock, AlertTriangle, AlertCircle, Plus, Search, Filter, Edit, Trash2, Download, Settings, LogOut } from 'lucide-react';
+import { useTasks } from './hooks/useTasks';
+import { useAuth } from './hooks/useAuth';
+import TaskForm from './components/TaskForm';
+import FilterPanel from './components/FilterPanel';
+import ExportPanel from './components/ExportPanel';
+import AuthPanel from './components/AuthPanel';
+import { LoginForm } from './components/LoginForm';
+import './App.css';
 
 function App() {
-  const { tasks, stats, loading, error, createTask, updateTask, deleteTask, searchTasks } = useTasks()
-  const [chatInput, setChatInput] = useState('')
-  const [showTaskForm, setShowTaskForm] = useState(false)
-  const [editingTask, setEditingTask] = useState(null)
-  const [commandParser] = useState(() => new CommandParser())
-  const [commandFeedback, setCommandFeedback] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
-  const [filteredTasks, setFilteredTasks] = useState(tasks)
-  const [activeFilters, setActiveFilters] = useState({})
-  const [showExport, setShowExport] = useState(false)
-  const [showAuth, setShowAuth] = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(true) // Permitir acesso por defeito
+  const { user, isAuthenticated, loading: authLoading, error: authError, register, login, logout } = useAuth();
+  const { tasks, stats, loading: tasksLoading, error: tasksError, createTask, updateTask, deleteTask, processCommand, loadTasks } = useTasks();
+  
+  const [chatInput, setChatInput] = useState('');
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [commandFeedback, setCommandFeedback] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filteredTasks, setFilteredTasks] = useState([]);
+  const [activeFilters, setActiveFilters] = useState({});
+  const [showExport, setShowExport] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadTasks();
+    }
+  }, [isAuthenticated, loadTasks]);
+
+  useEffect(() => {
+    let tempTasks = tasks;
+
+    if (activeFilters.status && activeFilters.status !== 'todos') {
+      tempTasks = tempTasks.filter(task => task.processo === activeFilters.status);
+    }
+    if (activeFilters.company && activeFilters.company !== 'todas') {
+      tempTasks = tempTasks.filter(task => task.entidade === activeFilters.company);
+    }
+    if (activeFilters.type && activeFilters.type !== 'todos') {
+      tempTasks = tempTasks.filter(task => task.tipo === activeFilters.type);
+    }
+    if (activeFilters.work && activeFilters.work !== 'todas') {
+      tempTasks = tempTasks.filter(task => task.obra === activeFilters.work);
+    }
+
+    setFilteredTasks(tempTasks);
+  }, [tasks, activeFilters]);
 
   const getStatusColor = (processo, dataLimite) => {
-    const hoje = new Date()
-    const limite = new Date(dataLimite)
+    const hoje = new Date();
+    const limite = new Date(dataLimite);
     
-    if (processo === 'concluido') return 'bg-green-100 text-green-800 border-green-200'
-    if (limite < hoje) return 'bg-red-100 text-red-800 border-red-200'
-    if (limite.toDateString() === hoje.toDateString()) return 'bg-orange-100 text-orange-800 border-orange-200'
-    return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-  }
+    if (processo === 'concluido') return 'bg-green-100 text-green-800 border-green-200';
+    if (limite < hoje) return 'bg-red-100 text-red-800 border-red-200';
+    if (limite.toDateString() === hoje.toDateString()) return 'bg-orange-100 text-orange-800 border-orange-200';
+    return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+  };
 
   const getStatusIcon = (processo, dataLimite) => {
-    const hoje = new Date()
-    const limite = new Date(dataLimite)
+    const hoje = new Date();
+    const limite = new Date(dataLimite);
     
-    if (processo === 'concluido') return <CheckCircle className="w-4 h-4" />
-    if (limite < hoje) return <AlertCircle className="w-4 h-4" />
-    if (limite.toDateString() === hoje.toDateString()) return <AlertTriangle className="w-4 h-4" />
-    return <Clock className="w-4 h-4" />
-  }
+    if (processo === 'concluido') return <CheckCircle className="w-4 h-4" />;
+    if (limite < hoje) return <AlertCircle className="w-4 h-4" />;
+    if (limite.toDateString() === hoje.toDateString()) return <AlertTriangle className="w-4 h-4" />;
+    return <Clock className="w-4 h-4" />;
+  };
 
   const getStatusText = (processo, dataLimite) => {
-    const hoje = new Date()
-    const limite = new Date(dataLimite)
+    const hoje = new Date();
+    const limite = new Date(dataLimite);
     
-    if (processo === 'concluido') return 'Concluído'
-    if (limite < hoje) return 'Em atraso'
-    if (limite.toDateString() === hoje.toDateString()) return 'Pendente (hoje)'
-    return 'Pendente'
-  }
+    if (processo === 'concluido') return 'Concluído';
+    if (limite < hoje) return 'Em atraso';
+    if (limite.toDateString() === hoje.toDateString()) return 'Pendente (hoje)';
+    return 'Pendente';
+  };
 
-  const handleFilterChange = (filtered, filters) => {
-    setFilteredTasks(filtered)
-    setActiveFilters(filters)
-  }
+  const handleCommandSubmit = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
 
-  // Atualizar filteredTasks quando tasks mudam
-  useEffect(() => {
-    if (Object.keys(activeFilters).length === 0) {
-      setFilteredTasks(tasks)
-    } else {
-      // Reaplicar filtros
-      handleFilterChange(tasks, activeFilters)
-    }
-  }, [tasks])
-
-  const handleExport = (format, count) => {
-    setCommandFeedback(`✅ ${count} tarefas exportadas em formato ${format.toUpperCase()}!`)
-    setTimeout(() => setCommandFeedback(''), 3000)
-  }
-
-  const handleAuthChange = (authenticated) => {
-    setIsAuthenticated(authenticated)
-  }
-
-  const handleChatSubmit = async (e) => {
-    e.preventDefault()
-    if (!chatInput.trim()) return
-
-    setCommandFeedback('')
-    const result = commandParser.parseCommand(chatInput)
-
-    if (!result.success) {
-      setCommandFeedback(`❌ ${result.error}`)
-      return
-    }
-
-    try {
-      switch (result.action) {
-        case 'createAuto':
-          await createTask({
-            dataLimite: result.data.dataLimite,
-            tipo: result.data.tipo,
-            obra: result.data.obra,
-            entidade: result.data.entidade,
-            descricao: result.data.descricao,
-            autoEntreEmpresa: result.data.empresa || 'Não aplicável',
-            observacoes: `Criado via comando: "${result.originalCommand}"`
-          })
-          setCommandFeedback('✅ Auto criado com sucesso!')
-          break
-
-        case 'createContract':
-          await createTask({
-            dataLimite: result.data.dataLimite,
-            tipo: result.data.tipo,
-            obra: `CONT_${Date.now()}`,
-            entidade: result.data.entidade,
-            descricao: result.data.descricao,
-            autoEntreEmpresa: 'Não aplicável',
-            observacoes: `Criado via comando: "${result.originalCommand}"`
-          })
-          setCommandFeedback('✅ Contrato criado com sucesso!')
-          break
-
-        case 'rescheduleTask':
-          const taskToReschedule = tasks.find(t => 
-            t.obra.toLowerCase().includes(result.data.obra.toLowerCase())
-          )
-          if (taskToReschedule) {
-            await updateTask(taskToReschedule.id, {
-              ...taskToReschedule,
-              dataLimite: result.data.novaData
-            })
-            setCommandFeedback('✅ Tarefa reagendada com sucesso!')
-          } else {
-            setCommandFeedback('❌ Tarefa não encontrada')
-          }
-          break
-
-        case 'markCompleted':
-          const taskToComplete = tasks.find(t => 
-            t.obra.toLowerCase().includes(result.data.obra.toLowerCase())
-          )
-          if (taskToComplete) {
-            await updateTask(taskToComplete.id, {
-              ...taskToComplete,
-              processo: 'concluido'
-            })
-            setCommandFeedback('✅ Tarefa marcada como concluída!')
-          } else {
-            setCommandFeedback('❌ Tarefa não encontrada')
-          }
-          break
-
-        case 'showWeeklyPending':
-          // Implementar filtro de tarefas pendentes da semana
-          setCommandFeedback('📋 Mostrando tarefas pendentes da semana')
-          break
-
-        default:
-          setCommandFeedback('❌ Ação não implementada')
-      }
-
-      setChatInput('')
-    } catch (error) {
-      setCommandFeedback(`❌ Erro ao executar comando: ${error.message}`)
-    }
-  }
-
-  const handleNewTask = () => {
-    setEditingTask(null)
-    setShowTaskForm(true)
-  }
+    setCommandFeedback('A processar comando...');
+    const result = await processCommand(chatInput);
+    setCommandFeedback(result.message);
+    setChatInput('');
+    loadTasks();
+  };
 
   const handleTaskSubmit = async (taskData) => {
-    try {
-      if (editingTask) {
-        await updateTask(editingTask.id, taskData)
-      } else {
-        await createTask(taskData)
-      }
-      setShowTaskForm(false)
-      setEditingTask(null)
-    } catch (error) {
-      console.error('Erro ao guardar tarefa:', error)
+    if (editingTask) {
+      await updateTask(editingTask.id, taskData);
+    } else {
+      await createTask(taskData);
     }
-  }
+    setShowTaskForm(false);
+    setEditingTask(null);
+    loadTasks();
+  };
 
-  const handleDeleteTask = async (taskId) => {
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setShowTaskForm(true);
+  };
+
+  const handleDeleteTask = async (id) => {
     if (window.confirm('Tem certeza que deseja eliminar esta tarefa?')) {
-      try {
-        await deleteTask(taskId)
-      } catch (error) {
-        console.error('Erro ao eliminar tarefa:', error)
-      }
+      await deleteTask(id);
+      loadTasks();
     }
-  }
+  };
 
-  const handleCancelForm = () => {
-    setShowTaskForm(false)
-    setEditingTask(null)
-  }
+  const handleFilterChange = (newFilters) => {
+    setActiveFilters(newFilters);
+  };
 
-  if (showTaskForm) {
+  const handleExport = async (format, filter) => {
+    // Lógica de exportação adaptada para o backend
+    alert(`Exportar ${filter} em formato ${format}`);
+  };
+
+  const handleAuthSubmit = async (password) => {
+    // Lógica de autenticação adaptada para o backend
+    alert(`Autenticar com password: ${password}`);
+  };
+
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <TaskForm
-          task={editingTask}
-          onSubmit={handleTaskSubmit}
-          onCancel={handleCancelForm}
-          loading={loading}
-        />
+      <div className="min-h-screen flex items-center justify-center">
+        <p>A carregar autenticação...</p>
       </div>
-    )
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        onLogin={login}
+        onRegister={register}
+        loading={authLoading}
+        error={authError}
+      />
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-blue-600" />
-              Assistente de Gestão
-            </h1>
-            <p className="text-gray-600 mt-1">Contratos, Autos e Tarefas</p>
-          </div>
-          <div className="flex gap-3">
-            <FilterPanel 
-              tasks={tasks}
-              onFilterChange={handleFilterChange}
-              isOpen={showFilters}
-              onToggle={() => setShowFilters(!showFilters)}
-            />
-            <Button 
-              variant="outline" 
-              onClick={() => setShowExport(!showExport)}
-              className="flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Exportar
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowAuth(!showAuth)}
-              className="flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              Configurações
-            </Button>
-            <Button onClick={handleNewTask} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Nova Tarefa
+    <div className="min-h-screen bg-gray-100 flex flex-col lg:flex-row">
+      {/* Sidebar */}
+      <aside className="w-full lg:w-64 bg-white p-6 shadow-md flex flex-col">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">Assistente de Gestão</h1>
+
+        {user && (
+          <div className="mb-6">
+            <p className="text-sm text-gray-600">Bem-vindo(a),</p>
+            <p className="font-semibold text-lg text-gray-800">{user.username}</p>
+            <Button variant="link" className="p-0 h-auto text-sm text-blue-600" onClick={logout}>
+              <LogOut className="w-4 h-4 mr-1" /> Sair
             </Button>
           </div>
-        </div>
-        </div>
-      </header>
+        )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Painel Principal */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Dashboard Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total</p>
-                      <p className="text-2xl font-bold">{stats.total}</p>
-                    </div>
-                    <Calendar className="w-8 h-8 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Pendentes</p>
-                      <p className="text-2xl font-bold text-yellow-600">
-                        {stats.pendentes}
-                      </p>
-                    </div>
-                    <Clock className="w-8 h-8 text-yellow-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Em Atraso</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {stats.emAtraso}
-                      </p>
-                    </div>
-                    <AlertCircle className="w-8 h-8 text-red-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Concluídos</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {stats.concluidos}
-                      </p>
-                    </div>
-                    <CheckCircle className="w-8 h-8 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+        <nav className="space-y-4 flex-grow">
+          <Button className="w-full justify-start" variant="ghost" onClick={() => {
+            setShowTaskForm(true);
+            setEditingTask(null);
+          }}>
+            <Plus className="mr-2 h-4 w-4" /> Nova Tarefa
+          </Button>
+          <Button className="w-full justify-start" variant="ghost" onClick={() => {
+            setShowFilters(!showFilters);
+            setShowExport(false);
+            setShowAuth(false);
+          }}>
+            <Filter className="mr-2 h-4 w-4" /> Filtros
+          </Button>
+          <Button className="w-full justify-start" variant="ghost" onClick={() => {
+            setShowExport(!showExport);
+            setShowFilters(false);
+            setShowAuth(false);
+          }}>
+            <Download className="mr-2 h-4 w-4" /> Exportar Dados
+          </Button>
+          <Button className="w-full justify-start" variant="ghost" onClick={() => {
+            setShowAuth(!showAuth);
+            setShowFilters(false);
+            setShowExport(false);
+          }}>
+            <Settings className="mr-2 h-4 w-4" /> Configurações
+          </Button>
+        </nav>
 
-            {/* Tabela de Tarefas */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Lista de Tarefas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-red-600 text-sm">{error}</p>
-                  </div>
-                )}
-                
-                {loading ? (
-                  <div className="flex justify-center items-center py-8">
-                    <div className="text-gray-500">A carregar...</div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>                        <tr className="bg-gray-50">
-                          <th className="text-left p-3 font-medium text-gray-600">Data Limite</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Processo</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Tipo</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Obra</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Entidade</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Código Contrato</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Descrição</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Auto Entre Empresa</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Observações</th>
-                          <th className="text-left p-3 font-medium text-gray-600">Ações</th>
-                        </tr>                      </thead>
-                  <tbody>
-                    {filteredTasks.length === 0 ? (
-                      <tr>
-                        <td colSpan="10" className="px-6 py-8 text-center text-gray-500">
-                          {Object.keys(activeFilters).some(key => activeFilters[key]) 
-                            ? 'Nenhuma tarefa encontrada com os filtros aplicados.'
-                            : 'Nenhuma tarefa encontrada. Clique em "Nova Tarefa" para começar.'
-                          }
+        {showFilters && (
+          <div className="mt-6">
+            <FilterPanel onFilterChange={handleFilterChange} activeFilters={activeFilters} tasks={tasks} />
+          </div>
+        )}
+
+        {showExport && (
+          <div className="mt-6">
+            <ExportPanel onExport={handleExport} tasks={tasks} />
+          </div>
+        )}
+
+        {showAuth && (
+          <div className="mt-6">
+            <AuthPanel onAuth={handleAuthSubmit} />
+          </div>
+        )}
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-grow p-6 space-y-6 overflow-auto">
+        {/* Cards de Estatísticas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total de Tarefas</CardTitle>
+              <Badge className="bg-blue-200 text-blue-800">{stats.total}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-yellow-50 border-yellow-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
+              <Badge className="bg-yellow-200 text-yellow-800">{stats.pendentes + stats.pendenteHoje}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.pendentes + stats.pendenteHoje}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-red-50 border-red-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Em Atraso</CardTitle>
+              <Badge className="bg-red-200 text-red-800">{stats.emAtraso}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.emAtraso}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-green-50 border-green-200">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Concluídos</CardTitle>
+              <Badge className="bg-green-200 text-green-800">{stats.concluidos}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.concluidos}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabela de Tarefas */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Minhas Tarefas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tasksLoading ? (
+              <p>A carregar tarefas...</p>
+            ) : tasksError ? (
+              <p className="text-red-500">Erro ao carregar tarefas: {tasksError}</p>
+            ) : filteredTasks.length === 0 ? (
+              <p>Nenhuma tarefa encontrada. Crie uma nova tarefa ou ajuste os filtros.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Limite</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Obra</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entidade</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código Contrato</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auto entre empresa</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Observações</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredTasks.map((task) => (
+                      <tr key={task.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(task.dataLimite).toLocaleDateString('pt-PT')}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.processo, task.dataLimite)}`}>
+                            {getStatusIcon(task.processo, task.dataLimite)}
+                            <span className="ml-1">{getStatusText(task.processo, task.dataLimite)}</span>
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.tipo}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.obra}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.entidade}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.codigoContrato || 'Não aplicável'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.descricao}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.autoEntreEmpresa}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.observacoes}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditTask(task)} className="text-blue-600 hover:text-blue-900">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteTask(task.id)} className="text-red-600 hover:text-red-900 ml-2">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </td>
                       </tr>
-                    ) : (
-                      filteredTasks.map((task) => (
-                            <tr key={task.id} className="border-b hover:bg-gray-50">
-                              <td className="p-3">{new Date(task.dataLimite).toLocaleDateString('pt-PT')}</td>
-                              <td className="p-3">
-                                <Badge className={`${getStatusColor(task.processo, task.dataLimite)} flex items-center gap-1 w-fit`}>
-                                  {getStatusIcon(task.processo, task.dataLimite)}
-                                  {getStatusText(task.processo, task.dataLimite)}
-                                </Badge>
-                              </td>
-                              <td className="p-3">
-                                <Badge variant="outline">{task.tipo}</Badge>
-                              </td>
-                              <td className="p-3 font-medium">{task.obra}</td>
-                              <td className="p-3">{task.entidade}</td>
-                              <td className="p-3 font-mono text-sm text-blue-600">{task.codigoContrato || 'Não aplicável'}</td>
-                              <td className="p-3">{task.descricao}</td>
-                              <td className="p-3">
-                                <span className={task.autoEntreEmpresa === 'Não aplicável' ? 'text-gray-500' : 'text-blue-600 font-medium'}>
-                                  {task.autoEntreEmpresa}
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-gray-600">
-                                {task.observacoes || '-'}
-                              </td>
-                              <td className="p-3">
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setEditingTask(task)
-                                      setShowTaskForm(true)
-                                    }}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDeleteTask(task.id)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Comandos de Texto */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Comandos de Texto</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCommandSubmit} className="flex space-x-2">
+              <Input 
+                type="text" 
+                placeholder="Digite um comando..." 
+                value={chatInput} 
+                onChange={(e) => setChatInput(e.target.value)} 
+                className="flex-grow" 
+              />
+              <Button type="submit">Enviar</Button>
+            </form>
+            {commandFeedback && <p className="mt-2 text-sm text-gray-600">{commandFeedback}</p>}
+          </CardContent>
+        </Card>
+
+        {/* Modal de Formulário de Tarefa */}
+        {showTaskForm && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+            <TaskForm 
+              onSubmit={handleTaskSubmit} 
+              onCancel={() => { 
+                setShowTaskForm(false); 
+                setEditingTask(null); 
+              }} 
+              initialData={editingTask} 
+            />
           </div>
-
-          {/* Painel de Chat */}
-          <div className="lg:col-span-1 space-y-4">
-              {/* Painel de Comandos */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Search className="w-5 h-5" />
-                    Comandos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <form onSubmit={handleChatSubmit} className="space-y-3">
-                    <Input
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Ex: Criar auto para segunda-feira..."
-                      className="w-full"
-                    />
-                    <Button type="submit" className="w-full">
-                      Executar Comando
-                    </Button>
-                  </form>
-
-                  {commandFeedback && (
-                    <div className={`p-3 rounded-lg text-sm ${
-                      commandFeedback.includes('✅') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                    }`}>
-                      {commandFeedback}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">Exemplos de comandos:</h4>
-                    <div className="space-y-1 text-xs text-gray-600">
-                      {commandParser.getExamples().map((example, index) => (
-                        <div key={index} className="p-2 bg-gray-50 rounded text-xs">
-                          "{example}"
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Painel de Exportação */}
-              {showExport && (
-                <ExportPanel 
-                  tasks={tasks}
-                  onExport={handleExport}
-                />
-              )}
-
-              {/* Painel de Autenticação */}
-              {showAuth && (
-                <AuthPanel 
-                  onAuthChange={handleAuthChange}
-                />
-              )}
-          </div>
-        </div>
-      </div>
+        )}
+      </main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
 

@@ -1,42 +1,56 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-// Função para gerar ID único
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
-
-// Armazenamento local temporário
-const getLocalTasks = () => {
-  try {
-    const stored = localStorage.getItem('assistente-gestao-tasks')
-    return stored ? JSON.parse(stored) : []
-  } catch {
-    return []
-  }
-}
-
-const setLocalTasks = (tasks) => {
-  try {
-    localStorage.setItem('assistente-gestao-tasks', JSON.stringify(tasks))
-  } catch (error) {
-    console.error('Erro ao salvar no localStorage:', error)
-  }
-}
+const API_BASE_URL = 'http://localhost:5000/api' // URL do backend Flask
 
 export const useTasks = () => {
-  const [tasks, setTasks] = useState(getLocalTasks())
+  const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // Carregar tarefas do servidor
+  const loadTasks = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include' // Importante para enviar cookies de sessão
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setTasks(data)
+      } else if (response.status === 401) {
+        setError('Não autenticado')
+        setTasks([])
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Erro ao carregar tarefas')
+      }
+    } catch (err) {
+      console.error('Erro ao carregar tarefas:', err)
+      setError('Erro de rede ou servidor')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar tarefas quando o componente é montado
+  useEffect(() => {
+    loadTasks()
+  }, [])
 
   // Calcular estatísticas
   const stats = {
     total: tasks.length,
-    pendentes: tasks.filter(t => t.processo !== 'concluido').length,
-    emAtraso: tasks.filter(t => {
-      if (t.processo === 'concluido') return false
-      const hoje = new Date()
-      const limite = new Date(t.dataLimite)
-      return limite < hoje
-    }).length,
-    concluidos: tasks.filter(t => t.processo === 'concluido').length
+    pendentes: tasks.filter(t => t.processo === 'pendente').length,
+    emAtraso: tasks.filter(t => t.processo === 'em-atraso').length,
+    concluidos: tasks.filter(t => t.processo === 'concluido').length,
+    pendenteHoje: tasks.filter(t => t.processo === 'pendente-hoje').length
   }
 
   // Função para criar tarefa
@@ -45,22 +59,27 @@ export const useTasks = () => {
     setError(null)
     
     try {
-      const newTask = {
-        id: generateId(),
-        ...taskData,
-        processo: 'pendente',
-        codigoContrato: taskData.codigoContrato || 'Não aplicável',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      const response = await fetch(`${API_BASE_URL}/tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData),
+        credentials: 'include'
+      })
+      
+      if (response.ok) {
+        const newTask = await response.json()
+        setTasks(prevTasks => [...prevTasks, newTask])
+        return newTask
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Erro ao criar tarefa')
+        throw new Error(errorData.error || 'Erro ao criar tarefa')
       }
-      
-      const updatedTasks = [...tasks, newTask]
-      setTasks(updatedTasks)
-      setLocalTasks(updatedTasks)
-      
-      return newTask
     } catch (err) {
-      setError('Erro ao criar tarefa')
+      console.error('Erro ao criar tarefa:', err)
+      setError(err.message || 'Erro ao criar tarefa')
       throw err
     } finally {
       setLoading(false)
@@ -73,18 +92,29 @@ export const useTasks = () => {
     setError(null)
     
     try {
-      const updatedTasks = tasks.map(task => 
-        task.id === id 
-          ? { ...task, ...taskData, updatedAt: new Date().toISOString() }
-          : task
-      )
+      const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData),
+        credentials: 'include'
+      })
       
-      setTasks(updatedTasks)
-      setLocalTasks(updatedTasks)
-      
-      return updatedTasks.find(t => t.id === id)
+      if (response.ok) {
+        const updatedTask = await response.json()
+        setTasks(prevTasks => 
+          prevTasks.map(task => task.id === id ? updatedTask : task)
+        )
+        return updatedTask
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Erro ao atualizar tarefa')
+        throw new Error(errorData.error || 'Erro ao atualizar tarefa')
+      }
     } catch (err) {
-      setError('Erro ao atualizar tarefa')
+      console.error('Erro ao atualizar tarefa:', err)
+      setError(err.message || 'Erro ao atualizar tarefa')
       throw err
     } finally {
       setLoading(false)
@@ -97,12 +127,113 @@ export const useTasks = () => {
     setError(null)
     
     try {
-      const updatedTasks = tasks.filter(task => task.id !== id)
-      setTasks(updatedTasks)
-      setLocalTasks(updatedTasks)
+      const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
+      })
+      
+      if (response.ok) {
+        setTasks(prevTasks => prevTasks.filter(task => task.id !== id))
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Erro ao eliminar tarefa')
+        throw new Error(errorData.error || 'Erro ao eliminar tarefa')
+      }
     } catch (err) {
-      setError('Erro ao eliminar tarefa')
+      console.error('Erro ao eliminar tarefa:', err)
+      setError(err.message || 'Erro ao eliminar tarefa')
       throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para processar comandos
+  const processCommand = async (command) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/command/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ command }),
+        credentials: 'include'
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data.success) {
+        // Se foi criada uma nova tarefa, adicionar à lista
+        if (data.task) {
+          setTasks(prevTasks => {
+            // Verificar se a tarefa já existe (para evitar duplicatas)
+            const exists = prevTasks.some(t => t.id === data.task.id)
+            if (!exists) {
+              return [...prevTasks, data.task]
+            }
+            // Se existe, atualizar
+            return prevTasks.map(t => t.id === data.task.id ? data.task : t)
+          })
+        }
+        
+        // Se foram retornadas múltiplas tarefas (ex: comando "mostrar pendentes")
+        if (data.tasks) {
+          // Não substituir todas as tarefas, apenas retornar as encontradas
+          return { success: true, message: data.message, tasks: data.tasks }
+        }
+        
+        return { success: true, message: data.message }
+      } else {
+        setError(data.message || 'Erro ao processar comando')
+        return { success: false, message: data.message || 'Erro ao processar comando' }
+      }
+    } catch (err) {
+      console.error('Erro ao processar comando:', err)
+      setError('Erro de rede ou servidor')
+      return { success: false, message: 'Erro de rede ou servidor' }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para sincronizar tarefas
+  const syncTasks = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          tasks: tasks,
+          lastSync: localStorage.getItem('lastSync')
+        }),
+        credentials: 'include'
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setTasks(data.tasks)
+        localStorage.setItem('lastSync', data.syncTime)
+        return { success: true, message: 'Sincronização concluída' }
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Erro na sincronização')
+        return { success: false, message: errorData.error || 'Erro na sincronização' }
+      }
+    } catch (err) {
+      console.error('Erro na sincronização:', err)
+      setError('Erro de rede ou servidor')
+      return { success: false, message: 'Erro de rede ou servidor' }
     } finally {
       setLoading(false)
     }
@@ -117,7 +248,8 @@ export const useTasks = () => {
       task.obra.toLowerCase().includes(lowerQuery) ||
       task.entidade.toLowerCase().includes(lowerQuery) ||
       task.descricao.toLowerCase().includes(lowerQuery) ||
-      task.tipo.toLowerCase().includes(lowerQuery)
+      task.tipo.toLowerCase().includes(lowerQuery) ||
+      (task.codigoContrato && task.codigoContrato.toLowerCase().includes(lowerQuery))
     )
   }
 
@@ -129,7 +261,10 @@ export const useTasks = () => {
     createTask,
     updateTask,
     deleteTask,
-    searchTasks
+    processCommand,
+    syncTasks,
+    searchTasks,
+    loadTasks
   }
 }
 
